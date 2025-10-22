@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retro Neon Pong</title>
+    <!-- Ícone da aba do navegador (favicon) usando um emoji de controle -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎮</text></svg>">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Estilos base para o visual arcade */
+        body {
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            /* Fonte para o estilo retro/monospace */
+            font-family: 'Courier New', Courier, monospace;
+            user-select: none; /* Previne seleção de texto */
+        }
+        #game-container {
+            /* Contêiner com borda e sombra neon */
+            border: 4px solid #39FF14; /* Neon Verde */
+            box-shadow: 0 0 10px #39FF14, 0 0 30px rgba(57, 255, 20, 0.6);
+            background-color: #000;
+            border-radius: 8px;
+            padding: 10px;
+            max-width: 95vw;
+            max-height: 95vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: all 0.3s ease-in-out;
+        }
+        canvas {
+            display: block;
+            background-color: #000;
+            /* Tamanho intrínseco do canvas, ajustado pelo container */
+            width: 600px;
+            height: 400px;
+            border: 1px dashed rgba(57, 255, 20, 0.2);
+            transition: all 0.3s ease-in-out;
+            /* Adiciona um cursor de toque/mão para indicar interatividade */
+            cursor: pointer;
+            touch-action: none; /* Previne o comportamento padrão de toque do navegador no canvas */
+        }
+        .neon-text {
+            color: #39FF14;
+            text-shadow: 0 0 5px #39FF14, 0 0 10px rgba(57, 255, 20, 0.7);
+            font-size: 1.2rem;
+            text-align: center;
+        }
+        /* Novo estilo para o título principal PONG MASTER */
+        .neon-master-text {
+            color: #FF00FF; /* Neon Pink/Magenta para destaque */
+            text-shadow: 0 0 7px #FF00FF, 0 0 20px rgba(255, 0, 255, 0.8), 0 0 30px rgba(255, 0, 255, 0.5);
+            font-size: 2.5rem; /* Tamanho grande */
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 15px; /* Mais espaço para separar */
+            letter-spacing: 0.2em; /* Espaçamento de letra para visual retrô */
+        }
+        #controls-display {
+            color: #00FFFF; /* Neon Azul */
+            text-shadow: 0 0 5px #00FFFF, 0 0 10px #00FFFF;
+            margin-top: 10px;
+            padding: 5px 10px;
+            font-size: 0.8rem;
+            text-align: center;
+        }
+        /* Estilo para a linha de crédito - AGORA AZUL NEON */
+        .credit-text {
+            color: #00FFFF; /* Neon Azul */
+            text-shadow: 0 0 3px #00FFFF, 0 0 5px rgba(0, 255, 255, 0.5);
+            font-size: 0.7rem; /* Texto menor */
+            margin-top: 5px;
+            margin-right: 5px;
+            opacity: 0.8; /* Levemente transparente */
+        }
+        /* --- ANIMAÇÃO DE VITÓRIA --- */
+        .win-message {
+            animation: flash 0.3s infinite alternate; /* Pisca rápido */
+            color: #FFD700; /* Dourado/Amarelo Neon para vitória */
+            font-size: 1.5rem !important; /* Maior destaque */
+        }
+        @keyframes flash {
+            from {
+                opacity: 1;
+                text-shadow: 0 0 10px #FFD700, 0 0 20px #FFD700;
+            }
+            to {
+                opacity: 0.3;
+                text-shadow: none;
+            }
+        }
+        
+        /* --- ESTILO DE DERROTA (Triste) --- */
+        .lose-message {
+            color: #FF8C00; /* Neon Laranja/Vermelho Suave para derrota */
+            text-shadow: 0 0 5px #FF8C00, 0 0 10px rgba(255, 140, 0, 0.5);
+            font-size: 1.5rem !important; /* Maior destaque */
+        }
+
+        @media (max-width: 700px) {
+            canvas {
+                width: 90vw;
+                height: 60vw;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <!-- Título do Jogo adicionado aqui -->
+        <h1 id="main-title" class="neon-master-text mb-4">PONG MASTER</h1>
+        
+        <div id="score-display" class="neon-text mb-4">PONTUAÇÃO: 0 - 0</div>
+        <canvas id="pongCanvas" width="600" height="400"></canvas>
+        <div id="controls-display">
+            CONTROLES: **Toque e Arraste** no seu lado da tela para mover sua raquete.
+        </div>
+        <div id="message-box" class="neon-text mt-4 opacity-0 transition-opacity duration-500"></div>
+        
+        <!-- Linha de Crédito adicionada -->
+        <div id="credit-line" class="credit-text mt-2 self-end">Desenvolvido por Emerson Jollo</div>
+    </div>
+
+    <script>
+        // Variáveis globais para o jogo
+        const canvas = document.getElementById('pongCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score-display');
+        const messageBox = document.getElementById('message-box');
+
+        // Configurações do Jogo
+        const GAME_WIDTH = canvas.width;
+        const GAME_HEIGHT = canvas.height;
+        const PADDLE_HEIGHT = 80;
+        const PADDLE_WIDTH = 10;
+        const BALL_SIZE = 8;
+        const PADDLE_SPEED = 6;
+        const MAX_BALL_SPEED = 8;
+        const INITIAL_BALL_SPEED = 4;
+        const MAX_SCORE = 5; // Limite de pontos para o fim do jogo
+
+        let gameRunning = false;
+        let keys = {};
+        
+        // Variáveis para o controle de toque (arraste)
+        let isDragging = false;
+        let touchOffsetY = 0; // Offset do toque em relação à borda superior da pá
+
+        // Cores Neon
+        const NEON_GREEN = '#39FF14';
+        const NEON_BLUE = '#00FFFF';
+        const NEON_WHITE = '#FFFFFF';
+
+        // Objetos do Jogo
+        let player = {
+            x: 10,
+            y: GAME_HEIGHT / 2 - PADDLE_HEIGHT / 2,
+            score: 0,
+            color: NEON_GREEN,
+            dy: 0 // Velocidade vertical
+        };
+
+        let ai = {
+            x: GAME_WIDTH - PADDLE_WIDTH - 10,
+            y: GAME_HEIGHT / 2 - PADDLE_HEIGHT / 2,
+            score: 0,
+            color: NEON_BLUE
+        };
+
+        let ball = {
+            x: GAME_WIDTH / 2,
+            y: GAME_HEIGHT / 2,
+            dx: 0, // Velocidade horizontal
+            dy: 0, // Velocidade vertical
+            speed: INITIAL_BALL_SPEED
+        };
+
+        // --- Funções Auxiliares ---
+
+        // Função para desenhar retângulos com efeito neon (para as pás)
+        function drawRect(x, y, w, h, color) {
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 10;
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, w, h);
+            ctx.shadowBlur = 0; // Desliga o shadow após desenhar
+        }
+
+        // Função para desenhar o círculo com efeito neon (para a bola)
+        function drawCircle(x, y, r, color) {
+            ctx.beginPath();
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 15;
+            ctx.fillStyle = color;
+            ctx.arc(x, y, r, 0, Math.PI * 2, false);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        // Desenha a linha central (decorativa)
+        function drawNet() {
+            ctx.strokeStyle = 'rgba(57, 255, 20, 0.4)'; // Cor neon sem tanto brilho
+            ctx.lineWidth = 4;
+            ctx.setLineDash([15, 10]); // Linha pontilhada
+            ctx.beginPath();
+            ctx.moveTo(GAME_WIDTH / 2, 0);
+            ctx.lineTo(GAME_WIDTH / 2, GAME_HEIGHT);
+            ctx.stroke();
+            ctx.setLineDash([]); // Volta para linha sólida
+        }
+
+        // Desenha a pontuação na tela
+        function drawScores() {
+            scoreDisplay.textContent = `PONTUAÇÃO: ${player.score} - ${ai.score}`;
+        }
+
+        // Exibe uma mensagem centralizada (para início/fim de jogo)
+        function displayMessage(text, duration = 3000, className = '') {
+            // Aplica classes base mais a classe específica (como 'win-message')
+            messageBox.className = 'neon-text mt-4 transition-opacity duration-500 ' + className; 
+            messageBox.textContent = text;
+            messageBox.style.opacity = '1';
+
+            if (duration > 0) {
+                setTimeout(() => {
+                    messageBox.style.opacity = '0';
+                    messageBox.className = 'neon-text mt-4 transition-opacity duration-500'; // Volta para as classes base
+                }, duration);
+            }
+        }
+
+        // Inicia o movimento da bola
+        function launchBall(direction) {
+            // Reinicia a posição no centro
+            ball.x = GAME_WIDTH / 2;
+            ball.y = GAME_HEIGHT / 2;
+            ball.speed = INITIAL_BALL_SPEED;
+
+            // Define a direção horizontal (1 ou -1)
+            ball.dx = ball.speed * direction;
+            // Define uma direção vertical aleatória (até 45 graus)
+            ball.dy = (Math.random() * 2 - 1) * ball.speed * 0.5;
+
+            // Garante que o jogo está rodando após o lançamento
+            gameRunning = true;
+            player.dy = 0; // Para a pá do jogador
+        }
+
+        // Reinicia o jogo (Zera placar e prepara para o próximo início)
+        function resetGame() {
+            player.score = 0;
+            ai.score = 0;
+            drawScores();
+            gameRunning = false;
+            // Garante que a mensagem de "início" não tenha a classe de animação de vitória
+            displayMessage("Toque para Começar", 0, ''); 
+        }
+
+        // --- Lógica do Jogo ---
+
+        // Lida com os movimentos do jogador (apenas teclado agora)
+        function updatePlayer() {
+            
+            // Controle por Teclado
+            if (keys['ArrowUp']) {
+                player.dy = -PADDLE_SPEED;
+            } else if (keys['ArrowDown']) {
+                player.dy = PADDLE_SPEED;
+            } else if (!isDragging) { // Move apenas se não estiver arrastando
+                player.dy = 0;
+            }
+
+            // Aplica movimento do teclado (o movimento por toque é aplicado diretamente no handleTouch)
+            player.y += player.dy;
+
+            // Limita a pá dentro do canvas
+            if (player.y < 0) {
+                player.y = 0;
+            } else if (player.y + PADDLE_HEIGHT > GAME_HEIGHT) {
+                player.y = GAME_HEIGHT - PADDLE_HEIGHT;
+            }
+        }
+
+        // Lógica simples da IA (CPU)
+        function updateAI() {
+            const aiCenter = ai.y + PADDLE_HEIGHT / 2;
+
+            // Se a bola estiver vindo em direção à IA
+            if (ball.dx > 0) {
+                const targetY = ball.y - PADDLE_HEIGHT / 2;
+                
+                // Move a pá da IA lentamente em direção à bola
+                if (aiCenter < ball.y) {
+                    ai.y += Math.min(PADDLE_SPEED * 0.7, ball.y - aiCenter);
+                } else if (aiCenter > ball.y) {
+                    ai.y -= Math.min(PADDLE_SPEED * 0.7, aiCenter - ball.y);
+                }
+            }
+            // Limita a pá da IA dentro do canvas
+            if (ai.y < 0) {
+                ai.y = 0;
+            } else if (ai.y + PADDLE_HEIGHT > GAME_HEIGHT) {
+                ai.y = GAME_HEIGHT - PADDLE_HEIGHT;
+            }
+        }
+
+        // Lógica de movimento e colisão da bola
+        function updateBall() {
+            ball.x += ball.dx;
+            ball.y += ball.dy;
+
+            // 1. Colisão com Topo e Base (Inverte dy)
+            if (ball.y < BALL_SIZE || ball.y > GAME_HEIGHT - BALL_SIZE) {
+                ball.dy *= -1;
+            }
+
+            // 2. Colisão com as Pás
+            const playerCollision = ball.x - BALL_SIZE < player.x + PADDLE_WIDTH &&
+                                    ball.y > player.y &&
+                                    ball.y < player.y + PADDLE_HEIGHT &&
+                                    ball.dx < 0;
+
+            const aiCollision = ball.x + BALL_SIZE > ai.x &&
+                                ball.y > ai.y &&
+                                ball.y < ai.y + PADDLE_HEIGHT &&
+                                ball.dx > 0;
+
+            if (playerCollision || aiCollision) {
+                // Inverte a direção horizontal
+                ball.dx *= -1;
+
+                // Aumenta a velocidade (limite de 8)
+                ball.speed = Math.min(ball.speed * 1.05, MAX_BALL_SPEED);
+                ball.dx = Math.sign(ball.dx) * ball.speed;
+
+                // Calcula o ângulo de reflexão (quanto mais perto da ponta, mais vertical)
+                const paddle = playerCollision ? player : ai;
+                const hitPoint = ball.y - (paddle.y + PADDLE_HEIGHT / 2); // Ponto de acerto relativo ao centro da pá
+                const normalizedHit = hitPoint / (PADDLE_HEIGHT / 2); // Valor entre -1 e 1
+                
+                // Ajusta a velocidade vertical
+                ball.dy = normalizedHit * ball.speed;
+            }
+
+            // 3. Ponto (Passou da borda)
+            if (ball.x < 0) {
+                // Ponto para a IA
+                ai.score++;
+                drawScores();
+                checkGameOver();
+                // A bola é relançada imediatamente após o ponto (se o jogo não tiver acabado)
+                if (gameRunning) {
+                    launchBall(1); // Lança para a IA
+                }
+            } else if (ball.x > GAME_WIDTH) {
+                // Ponto para o Jogador
+                player.score++;
+                drawScores();
+                checkGameOver();
+                // A bola é relançada imediatamente após o ponto (se o jogo não tiver acabado)
+                if (gameRunning) {
+                    launchBall(-1); // Lança para o Jogador
+                }
+            }
+        }
+
+        // Verifica se alguém atingiu a pontuação máxima
+        function checkGameOver() {
+            if (player.score >= MAX_SCORE) {
+                // Zera o placar e exibe a mensagem de recomeço com ANIMAÇÃO de vitória
+                displayMessage("FIM DE JOGO! VOCÊ VENCEU! Toque para Jogar Novamente.", 0, 'win-message');
+                gameRunning = false;
+            } else if (ai.score >= MAX_SCORE) {
+                 // Zera o placar e exibe a mensagem de recomeço com estilo de derrota
+                displayMessage("FIM DE JOGO! A CPU VENCEU. Não Desanime... Toque para Tentar de Novo.", 0, 'lose-message'); // Aplica a nova classe
+                gameRunning = false;
+            }
+        }
+
+        // --- Renderização (Desenho) ---
+
+        function draw() {
+            // Limpa o canvas para o próximo frame
+            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+            // Fundo escuro já definido no CSS
+
+            // Desenha a rede central
+            drawNet();
+
+            // Desenha o Jogador e a IA
+            drawRect(player.x, player.y, PADDLE_WIDTH, PADDLE_HEIGHT, player.color);
+            drawRect(ai.x, ai.y, PADDLE_WIDTH, PADDLE_HEIGHT, ai.color);
+
+            // Desenha a Bola
+            if (gameRunning || ball.dx !== 0) {
+                drawCircle(ball.x, ball.y, BALL_SIZE, NEON_WHITE);
+            }
+        }
+
+        // --- Loop Principal do Jogo ---
+
+        function gameLoop() {
+            if (gameRunning) {
+                updatePlayer();
+                updateAI();
+                updateBall();
+            }
+
+            draw();
+
+            // Pede ao navegador para chamar a função novamente no próximo frame
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Touch Control Handlers (Arrastar a Pá) ---
+
+        function handleTouch(e) {
+            e.preventDefault();
+            
+            // Se o jogo não estiver rodando, o toque inicia/reinicia
+            if (!gameRunning) {
+                // Reset/Reiniciar a partida (zera placar e lança a bola)
+                resetGame(); 
+                // Lança para o jogador (-1) ou AI (1) aleatoriamente
+                launchBall(Math.random() < 0.5 ? -1 : 1);
+                return; 
+            }
+
+            // --- Lógica de Arraste (Drag) ---
+            
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            const touchX = touch.clientX - rect.left;
+            const touchY = touch.clientY - rect.top;
+
+            // 1. Verifica se o toque está no lado do jogador (metade esquerda)
+            if (touchX < canvas.width / 2) { 
+                
+                if (e.type === 'touchstart') {
+                    // INÍCIO DO ARRASTE: O toque pode começar em qualquer lugar do lado esquerdo.
+                    isDragging = true;
+                    // Define o offset para que o centro da pá "grude" no ponto de toque (snapping)
+                    // Isso permite que o usuário toque em qualquer lugar da área e mova a pá.
+                    touchOffsetY = PADDLE_HEIGHT / 2; 
+                    
+                    // Atualiza a posição inicial imediatamente ao tocar para centralizar a pá no dedo
+                    let newY = touchY - touchOffsetY;
+                    if (newY < 0) {
+                        newY = 0;
+                    } else if (newY + PADDLE_HEIGHT > GAME_HEIGHT) {
+                        newY = GAME_HEIGHT - PADDLE_HEIGHT;
+                    }
+                    player.y = newY;
+
+
+                } 
+                
+                // 2. Se estiver arrastando (move)
+                if (isDragging && e.type === 'touchmove') {
+                    // Calcula a nova posição Y da pá: ponto de toque Y menos o offset
+                    let newY = touchY - touchOffsetY;
+
+                    // Aplica limite de tela (Clamping)
+                    if (newY < 0) {
+                        newY = 0;
+                    } else if (newY + PADDLE_HEIGHT > GAME_HEIGHT) {
+                        newY = GAME_HEIGHT - PADDLE_HEIGHT;
+                    }
+                    
+                    player.y = newY;
+                }
+            }
+            // Se o dedo arrastar para o lado da IA, o arraste da pá do jogador é interrompido
+            else if (e.type === 'touchmove' && touchX > canvas.width / 2) {
+                 isDragging = false;
+            }
+        }
+
+        function stopTouch(e) {
+             e.preventDefault();
+             isDragging = false; // Termina o arraste ao soltar o dedo
+        }
+
+        // Adiciona listeners de toque ao canvas
+        canvas.addEventListener('touchstart', handleTouch, false);
+        canvas.addEventListener('touchmove', handleTouch, false);
+        canvas.addEventListener('touchend', stopTouch, false);
+        canvas.addEventListener('touchcancel', stopTouch, false);
+
+
+        // --- Eventos de Controle de Teclado (Mantidos como fallback) ---
+
+        document.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+
+            // Inicia o jogo com a barra de espaço
+            if (e.key === ' ' && !gameRunning) {
+                // Evita que a página role
+                e.preventDefault(); 
+                // Reset/Reiniciar a partida (zera placar e lança a bola)
+                resetGame();
+                // Lança para o jogador (-1) ou AI (1) aleatoriamente
+                launchBall(Math.random() < 0.5 ? -1 : 1);
+            } 
+            
+            // Adicionado: Previne o scroll da página ao usar as setas
+            if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === ' ') {
+                 e.preventDefault();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+        
+        // --- Inicialização ---
+        
+        window.onload = function() {
+            resetGame(); // Configura a pontuação inicial e a mensagem de início
+            gameLoop();  // Inicia o loop de animação
+        };
+
+    </script>
+</body>
+</html>
